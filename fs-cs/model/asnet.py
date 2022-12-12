@@ -46,7 +46,7 @@ class AttentiveSqueezeNetwork(iFSLModule):
         '''
 
         support_img = rearrange(batch['support_imgs'].squeeze(2), 'b n c h w -> (b n) c h w')
-        support_mask = None if self.weak else rearrange(batch['support_masks'].squeeze(2), 'b n h w -> (b n) h w')
+        support_mask = None if self.task == 'cls' else rearrange(batch['support_masks'].squeeze(2), 'b n h w -> (b n) h w')
         query_img = batch['query_img']
 
         with torch.no_grad():

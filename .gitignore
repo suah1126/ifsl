@@ -114,3 +114,6 @@ venv.bak/
 */vis_results
 *.tar
 */etc
+
+datasets/
+example/

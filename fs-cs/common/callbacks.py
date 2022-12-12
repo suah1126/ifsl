@@ -98,8 +98,8 @@ class CustomCheckpoint(ModelCheckpoint):
             assert not os.path.exists(self.dirpath), f'{self.dirpath} already exists'
         self.filename = 'best_model'
         self.way = args.way
-        self.weak = args.weak
-        self.monitor = 'val/er' if args.weak else 'val/miou'
+        self.task = args.task
+        self.monitor = 'val/er' if args.task == 'cls' else 'val/miou' if args.task == 'seg' else 'trn/loss'
 
         super(CustomCheckpoint, self).__init__(dirpath=self.dirpath,
                                                monitor=self.monitor,

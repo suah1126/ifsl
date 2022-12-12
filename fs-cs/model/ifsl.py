@@ -12,7 +12,7 @@ class iFSLModule(pl.LightningModule):
 
         self.args = args
         self.way = self.args.way
-        self.weak = args.weak
+        self.task = args.task
         self.range = torch.arange(args.way + 1, requires_grad=False).view(1, args.way + 1, 1, 1)
         self.learner = None
 
@@ -44,56 +44,86 @@ class iFSLModule(pl.LightningModule):
         # FYI: this support_names' shape is transposed so keep in mind for vis
         batch['support_names'].shape : [bsz, shot, way]
         batch['support_ignore_idxs'].shape: [bsz, way, shot, H, W]
-        batch['class_id'].shape : [bsz]
         batch['support_classes'].shape : [bsz, way] (torch.int64)
         batch['query_class_presence'].shape : [bsz, way] (torch.bool)
         # FYI: K-shot is always fixed to 1 for training
         """
-
         split = 'trn' if self.training else 'val'
-        shared_masks = self.forward(batch)
-        pred_cls, pred_seg, logit_seg = self.predict_cls_and_mask(shared_masks, batch)
-
-        if self.weak:
-            loss = self.compute_cls_objective(shared_masks, batch['query_class_presence'])
+        if self.task == 'det':
+            train_out = self.forward(batch)
+            loss, param = self.compute_det_objective(train_out, batch['query_box'])
+            with torch.no_grad():  
+                self.average_meter.update_det(train_out, batch['query_box'], loss, self.training, param[0], param[1], param[2], batch['org_query_imsize'])
+                self.log(f'{split}/loss', loss, on_step=True, on_epoch=False, prog_bar=False, logger=False)
         else:
-            loss = self.compute_seg_objective(logit_seg, batch['query_mask'])
+            shared_masks = self.forward(batch)
+            pred_cls, pred_seg, logit_seg = self.predict_cls_and_mask(shared_masks, batch)
+            if self.task == 'cls':
+                loss = self.compute_cls_objective(shared_masks, batch['query_class_presence'])
+            else:
+                loss = self.compute_seg_objective(logit_seg, batch['query_mask'])
 
-        with torch.no_grad():
-            self.average_meter.update_cls(pred_cls, batch['query_class_presence'])
-            self.average_meter.update_seg(pred_seg, batch, loss.item())
+            with torch.no_grad():
+                self.average_meter.update_cls(pred_cls, batch['query_class_presence'])
+                self.average_meter.update_seg(pred_seg, batch, loss.item())
 
-            self.log(f'{split}/loss', loss, on_step=True, on_epoch=False, prog_bar=False, logger=False)
+                self.log(f'{split}/loss', loss, on_step=True, on_epoch=False, prog_bar=False, logger=False)
         return loss
 
     def training_epoch_end(self, training_step_outputs):
         self._shared_epoch_end(training_step_outputs)
 
-    def validation_step(self, batch, batch_idx):
-        # model.eval() and torch.no_grad() are called automatically for validation
-        # in pytorch_lightning
-        self.training_step(batch, batch_idx)
+    # def validation_step(self, batch, batch_idx):
+    #     # model.eval() and torch.no_grad() are called automatically for validation
+    #     # in pytorch_lightning
+    #     #self.training_step(batch, batch_idx)
+    #     pass
 
-    def validation_epoch_end(self, validation_step_outputs):
-        # model.eval() and torch.no_grad() are called automatically for validation
-        # in pytorch_lightning
-        self._shared_epoch_end(validation_step_outputs)
+    # def validation_epoch_end(self, validation_step_outputs):
+    #     # model.eval() and torch.no_grad() are called automatically for validation
+    #     # in pytorch_lightning
+    #     #self._shared_epoch_end(validation_step_outputs)
+    #     pass
 
     def _shared_epoch_end(self, steps_outputs):
         split = 'trn' if self.training else 'val'
-        miou = self.average_meter.compute_iou()
-        er = self.average_meter.compute_cls_er()
-        loss = self.average_meter.avg_seg_loss()
 
-        dict = {f'{split}/loss': loss,
-                f'{split}/miou': miou,
-                f'{split}/er': er}
+        if self.task =='det':
+            if True:
+                loss = self.average_meter.avg_det_loss()
+                print(f'\n[{split}] ep: {self.current_epoch:>3}| {split}/loss: {loss:.3f}')
+                mAP = 0.
+            else:
+                loss = self.average_meter.avg_det_loss()
+                mAP = self.average_meter.avg_precision()  
+                print(f'\n\n[{split}] ep: {self.current_epoch:>3}| {split}/loss: {loss:.3f}| {split}/mAP: {mAP:.3f}')
+            
 
-        for k in dict:
-            self.log(k, dict[k], on_epoch=True, logger=True)
+            dict = {f'{split}/loss': -loss,
+                f'{split}/mAP': mAP
+                }
 
-        space = '\n\n' if split == 'val' else '\n'
-        print(f'{space}[{split}] ep: {self.current_epoch:>3}| {split}/loss: {loss:.3f} | {split}/miou: {miou:.3f} | {split}/er: {er:.3f}')
+            for k in dict:
+                self.log(k, dict[k], on_epoch=True, logger=True)   
+
+                # precision, recall, fscore = self.average_meter.avg_precision()
+                # print(f'\n\n[{split}] ep: {self.current_epoch:>3}| {split}/precision: {precision:.3f}| {split}/recall: {recall:.3f}| {split}/fscore: {fscore:.3f}')
+            #@todo: map
+
+        else:
+            miou = self.average_meter.compute_iou()
+            er = self.average_meter.compute_cls_er()
+            loss = self.average_meter.avg_seg_loss()
+
+            dict = {f'{split}/loss': loss,
+                    f'{split}/miou': miou,
+                    f'{split}/er': er}
+
+            for k in dict:
+                self.log(k, dict[k], on_epoch=True, logger=True)
+
+            space = '\n\n' if split == 'val' else '\n'
+            print(f'{space}[{split}] ep: {self.current_epoch:>3}| {split}/loss: {loss:.3f} | {split}/miou: {miou:.3f} | {split}/er: {er:.3f}')
 
     def test_step(self, batch, batch_idx):
         pred_cls, pred_seg = self.predict_mask_nshot(batch, self.args.shot)
