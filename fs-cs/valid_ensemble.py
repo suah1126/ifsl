@@ -12,7 +12,7 @@ from common.cfg import parse_cfg
 from model.metayolo import MetaYoloNetwork
 from data.dataset import FSCSDatasetModule
 from common.callbacks import MeterCallback, CustomProgressBar, CustomCheckpoint, OnlineLogger
-from data.pascal import DatasetPASCAL
+from data.pascal_finetune import DatasetPASCAL
 
 import os
 import pdb
@@ -21,7 +21,7 @@ from einops import rearrange
 
 
 def valid(args, outfile, use_baserw=False):
-    m = MetaYoloNetwork.load_from_checkpoint('logs/pascal/fold3/resnet101_recent/best_model-v6.ckpt', args=args)
+    m = MetaYoloNetwork.load_from_checkpoint('logs/pascal/fold4/resnet101/last.ckpt', args=args)
     m.eval()
 
     img_mean = [0.485, 0.456, 0.406]
@@ -35,22 +35,18 @@ def valid(args, outfile, use_baserw=False):
                             transform=transform,
                             split='trn',
                             way=20,
-                            shot=args.shot,
-                            task=args.task)
+                            shot=1,
+                            task='det')
     valid_loader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=8)
-
+    f = open('valid_ensemble'+str(args.fold)+'.txt', 'w')
     # metaloader = iter(metaloader)
-    n_cls = 15
+    n_cls = 20
     enews = [0.0] * n_cls
     cnt = [0.0] * n_cls
     fps = [0]*n_cls
 
     prefix = './example/output'
     for i, cls_name in enumerate(dataset.CLASSES):
-        # if i < 6:
-        #     continue
-        if i > 15:
-            break
         buf = '%s/%s%s.txt' % (prefix, outfile, cls_name)
         fps[i-1] = open(buf, 'w')
    
@@ -81,9 +77,12 @@ def valid(args, outfile, use_baserw=False):
 
     #     dynamic_weights = [torch.stack(enews, dim=0)]
 
-
     for batch_idx, batch in enumerate(valid_loader):
         #output = m.backbone(batch['query_img'], dynamic_weights)
+        for name in batch['query_name']:
+            f.write(name)
+            f.write('\n')
+
         output = m(batch)
         print(f'progress: {batch_idx}/{len(valid_loader)}')
         if isinstance(output, tuple):
@@ -138,7 +137,7 @@ if __name__ == '__main__':
     parser.add_argument('--bsz', type=int, default=2, help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-7, help='Learning rate')
     parser.add_argument('--niter', type=int, default=2000, help='Max iterations')
-    parser.add_argument('--fold', type=int, default=0, choices=[0, 1, 2, 3], help='4-fold validation fold')
+    parser.add_argument('--fold', type=int, default=0, choices=[0, 1, 2, 3, 4], help='4-fold validation fold')
     parser.add_argument('--backbone', type=str, default='resnet101', choices=['resnet50', 'resnet101'], help='Backbone CNN network')
     parser.add_argument('--nowandb', action='store_true', help='Flag not to log at wandb')
     parser.add_argument('--eval', action='store_true', help='Flag to evaluate a model checkpoint')

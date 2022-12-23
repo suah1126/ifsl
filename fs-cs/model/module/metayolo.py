@@ -612,7 +612,8 @@ class Darknet(nn.Module):
 
         self.header = torch.IntTensor([0,0,0,0])
         self.seen = 0
-        self.load_weights('./model/module/darknet19_448.conv.23')
+        #self.load_weights('./model/module/darknet19_448.conv.23')
+        #self.load_weights('./logs/pascal/fold3/resnet101/last.ckpt')
 
     def meta_forward(self, metax):
         # Get weights from learnet
@@ -889,7 +890,6 @@ class Darknet(nn.Module):
                     if batch_normalize:
                         start = load_conv_bn(buf, start, model[0], model[1])
                     else:
-                        
                         start = load_conv(buf, start, model[0])
                 elif block['type'] == 'connected':
                     model = models[ind]
@@ -1252,7 +1252,7 @@ class RegionLossV2(nn.Module):
         self.num_anchors = 5
         self.anchor_step = len(self.anchors)//self.num_anchors
         self.coord_scale = 1.
-        self.noobject_scale = 0.5
+        self.noobject_scale = 1.
         self.object_scale = 5.
         self.class_scale = 10
         self.thresh = 0.6

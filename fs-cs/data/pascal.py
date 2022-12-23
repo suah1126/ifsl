@@ -64,7 +64,7 @@ class DatasetPASCAL(Dataset):
         query_mask, query_ignore_idx = self.get_query_mask(query_img, query_cmask, rename_class)
         support_imgs = torch.stack([torch.stack([self.transform(support_img) for support_img in support_imgs_c]) for support_imgs_c in support_imgs])
         support_boxes, support_boxes_masks, support_masks, support_ignore_idxs = self.get_support_masks(support_imgs, _support_classes, support_cboxes, support_cmasks, rename_class)
-
+        
         _support_classes = torch.tensor(_support_classes)
         query_class_presence = torch.tensor(query_class_presence)
 
@@ -99,8 +99,8 @@ class DatasetPASCAL(Dataset):
         #         box_support_img = ImageDraw.Draw(s_img_pil)
         #         box_support_img.rectangle(list(object_box[1:]), outline=(0, 255, 0), width=3)
         #         box_support_img.text((object_box[1], object_box[2]), str(object_box[0]))
-        #         s_img_pil.save('./example/s_'+query_name+'_'+ str(clsid)+'.jpg', 'JPEG')
-         
+        #         s_img_pil.save('./example/s_'+query_name+'_'+ str(clsid)+'.jpg', 'JPEG')      
+
         batch = {'query_img': query_img,
                  'query_mask': query_mask,
                  'query_box': query_box, 
@@ -178,8 +178,9 @@ class DatasetPASCAL(Dataset):
         return query_box
 
     def get_query_mask(self, query_img, query_cmask, rename_class):
-        if self.split == 'trn':  # resize during training and retain orignal sizes during validation
-            query_cmask = F.interpolate(query_cmask.unsqueeze(0).unsqueeze(0).float(), query_img.size()[-2:], mode='nearest').squeeze()
+        # if self.split == 'trn':  # resize during training and retain orignal sizes during validation
+        #     query_cmask = F.interpolate(query_cmask.unsqueeze(0).unsqueeze(0).float(), query_img.size()[-2:], mode='nearest').squeeze()
+        query_cmask = F.interpolate(query_cmask.unsqueeze(0).unsqueeze(0).float(), query_img.size()[-2:], mode='nearest').squeeze()
         query_mask, query_ignore_idx = self.generate_query_episodic_mask(query_cmask.float(), rename_class)
         return query_mask, query_ignore_idx
 

@@ -19,6 +19,8 @@ class MetaYoloNetwork(iFSLModule):
         self.loss = self.learner.loss
         self.lr = 0.0001 / 3.0
         self.processed_batches = 0
+        self.learner.print_network()
+        
     def forward(self, batch):
         '''
         query_img.shape : [bsz, 3, H, W]
@@ -55,32 +57,32 @@ class MetaYoloNetwork(iFSLModule):
         lr = 0.0001 / 3.0 / 64
         return torch.optim.Adam(params=self.parameters(), lr=lr, weight_decay=0.0005)
 
-    def optimizer_step(
-        self,
-        epoch,
-        batch_idx,
-        optimizer,
-        optimizer_idx,
-        optimizer_closure,
-        on_tpu=False,
-        using_native_amp=False,
-        using_lbfgs=False,
-    ):
-        # update params
-        optimizer.step(closure=optimizer_closure)
-        steps=[-1,6,10,200]
-        scales=[0.1,10,.1,.1]
-        lr = 0.0001 / 3.0
-        for i in range(len(steps)):
-            scale = scales[i] if i < len(scales) else 1
-            if epoch >= steps[i]:
-                lr = lr * scale
-                if epoch == steps[i]:
-                    break
-            else:
-                break
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = lr/64
+    # def optimizer_step(
+    #     self,
+    #     epoch,
+    #     batch_idx,
+    #     optimizer,
+    #     optimizer_idx,
+    #     optimizer_closure,
+    #     on_tpu=False,
+    #     using_native_amp=False,
+    #     using_lbfgs=False,
+    # ):
+    #     # update params
+    #     optimizer.step(closure=optimizer_closure)
+    #     steps=[-1,6,11,200]
+    #     scales=[0.1,10,.1,.1]
+    #     lr = 0.1 / 3.0 / 64
+    #     for i in range(len(steps)):
+    #         scale = scales[i] if i < len(scales) else 1
+    #         if epoch >= steps[i]:
+    #             lr = lr * scale
+    #             if epoch == steps[i]:
+    #                 break
+    #         else:
+    #             break
+    #     for param_group in optimizer.param_groups:
+    #         param_group['lr'] = lr/64
     
     def train_mode(self):
         self.train()
