@@ -5,7 +5,7 @@ from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.callbacks.progress import ProgressBar, reset, convert_inf
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 
-from common.evaluation import AverageMeter
+from common.evaluation import Evaluator, AverageMeter
 from common import utils
 
 from pprint import PrettyPrinter
@@ -47,7 +47,13 @@ class CustomProgressBar(ProgressBar):
         self.test_progress_bar = self.init_test_tqdm()
         self.test_progress_bar.set_description(f'[test] {pl_module.args.benchmark} | fold{pl_module.args.fold} ')
         reset(self.test_progress_bar, self.total_test_batches)
+        
+    def on_test_end(self, trainer, pl_module):
+        self.test_progress_bar.close()
 
+    def on_test_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+        if self._should_update(self.test_batch_idx, convert_inf(self.total_test_batches)):
+            self._update_bar(self.test_progress_bar)
 
 class MeterCallback(Callback):
     """
@@ -87,6 +93,8 @@ class MeterCallback(Callback):
         pl_module.average_meter = AverageMeter(dataset, self.args.way)
         pl_module.eval()
 
+    def on_test_end(self, trainer, pl_module):
+        Evaluator.on_test_end()
 
 class CustomCheckpoint(ModelCheckpoint):
     """
@@ -99,12 +107,13 @@ class CustomCheckpoint(ModelCheckpoint):
         self.filename = 'best_model'
         self.way = args.way
         self.weak = args.weak
-        self.monitor = 'val/er' if args.weak else 'val/miou'
+        self.monitor = 'val/er' if args.weak else 'trn/loss' if args.task == 'det' else 'val/miou'
+        self.mode = 'min' if args.task == 'det' else 'max'
 
         super(CustomCheckpoint, self).__init__(dirpath=self.dirpath,
                                                monitor=self.monitor,
                                                filename=self.filename,
-                                               mode='max',
+                                               mode=self.mode,
                                                verbose=True,
                                                save_last=True)
         # For evaluation, load best_model-v(k).cpkt where k is the max index
@@ -123,7 +132,10 @@ class CustomCheckpoint(ModelCheckpoint):
         vers.sort()
         # vers = ['best_model.ckpt'] or
         # vers = ['best_model-v1.ckpt', 'best_model-v2.ckpt', 'best_model.ckpt']
-        best_model = vers[-1] if len(vers) == 1 else vers[-2]
+        if vers:
+            best_model = vers[-1] if len(vers) == 1 else vers[-2]
+        else:
+            best_model = 'last.ckpt'
         return os.path.join(self.dirpath, best_model)
 
 

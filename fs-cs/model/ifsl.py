@@ -13,8 +13,10 @@ class iFSLModule(pl.LightningModule):
         self.args = args
         self.way = self.args.way
         self.weak = args.weak
+        self.task = args.task
         self.range = torch.arange(args.way + 1, requires_grad=False).view(1, args.way + 1, 1, 1)
         self.learner = None
+        self.loss = None
 
     def forward(self, batch):
         pass
@@ -163,6 +165,9 @@ class iFSLModule(pl.LightningModule):
         # B, N, 2, H, W -> B, N, 2 -> B, 2
         prob_avg = shared_masks.mean(dim=[-1, -2]).squeeze(1)
         return F.nll_loss(prob_avg, gt_presence.long().squeeze(-1))
+
+    def compute_det_objective(self, output, target):
+        return self.loss(output, target, self.current_epoch)
 
     def merge_bg_masks(self, shared_fg_masks):
         # B, N, H, W

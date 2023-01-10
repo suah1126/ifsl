@@ -11,7 +11,7 @@ class FSCSDatasetModule(LightningDataModule):
     """
     A LightningDataModule for FS-CS benchmark
     """
-    def __init__(self, args, img_size=400):
+    def __init__(self, args, img_size=416):
         super().__init__()
         self.args = args
         self.datapath = args.datapath
@@ -33,7 +33,9 @@ class FSCSDatasetModule(LightningDataModule):
                                                      transform=self.transform,
                                                      split='trn',
                                                      way=self.args.way,
-                                                     shot=1)  # shot=1 fixed for training
+                                                     shot=1,
+                                                     task=self.args.task,
+                                                     finetune=self.args.finetune)  # shot=1 fixed for training
         dataloader = DataLoader(dataset, batch_size=self.args.bsz, shuffle=True, num_workers=8)
         return dataloader
 
@@ -43,7 +45,8 @@ class FSCSDatasetModule(LightningDataModule):
                                                      transform=self.transform,
                                                      split='val',
                                                      way=self.args.way,
-                                                     shot=self.args.shot)
+                                                     shot=self.args.shot,
+                                                     task=self.args.task)
         dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=8)
         return dataloader
 

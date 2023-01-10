@@ -1,8 +1,20 @@
 r""" Evaluation helpers """
 import torch
 
+from common.detection import *
 
 class Evaluator:
+    hyp = {
+        'conf_thresh': 0.0005,
+        'nms_thresh': 0.45,
+        'anchors': [1.3221, 1.73145, 3.19275, 4.00944, 5.05587, 8.09892, 9.47112, 4.84053, 11.2364, 10.0071],
+        'num_anchors': 5,
+        'only_objectness': 1
+    }
+    way = 20
+    annots = {}
+    fps = None
+
     @classmethod
     def cls_prediction(cls, cls_score, gt):
         cls_pred = cls_score >= 0.5
@@ -40,6 +52,51 @@ class Evaluator:
 
         return area_inter, area_union
 
+    @classmethod
+    def on_test_end(cls):
+        if cls.fps:
+            for i in range(cls.way):
+                cls.fps[i].close()
+            eval(cls.annots, cls.filepath, cls.benchmark, cls.way)
+
+    @classmethod
+    def init_det_prediction(cls, benchmark, fold):
+        cls.filepath = './output/' + benchmark + '/fold' + str(fold)
+        cls.way = 20 if benchmark == 'pascal' else 80
+        cls.fps = [0] * cls.way
+
+        for i in range(cls.way):
+            buf = '%s/pred_%s.txt' % (cls.filepath, str(i+1))
+            cls.fps[i-1] = open(buf, 'w')
+
+    @classmethod
+    def det_prediction(cls, output, batch):
+        bsz = batch['query_img'].size(0)
+        shot = batch['support_imgs'].size(2)
+
+        pred_boxes = get_region_boxes(output, cls.way, shot, cls.hyp)
+
+        for b in range(bsz):
+            cls.annots[batch['query_name'][b]] = {'bbox': batch['query_box'][b]}
+            width = batch['org_query_imsize'][0][b]
+            height = batch['org_query_imsize'][1][b]
+            for i in range(cls.way):
+                oi = b * cls.way + i
+                boxes = pred_boxes[oi]
+                boxes = nms(boxes, cls.hyp['nms_thresh'])
+                for box in boxes:
+                    x1 = (box[0] - box[2]/2.0) * width
+                    y1 = (box[1] - box[3]/2.0) * height
+                    x2 = (box[0] + box[2]/2.0) * width
+                    y2 = (box[1] + box[3]/2.0) * height
+
+                    det_conf = box[4]
+                    for j in range((len(box)-5)//2):
+                        cls_conf = box[5+2*j]
+                        cls_id = box[6+2*j]
+                        prob = det_conf * cls_conf
+                        cls.fps[i].write('%s %f %f %f %f %f\n' % (batch['query_name'][b], prob, x1, y1, x2, y2))
+
 
 class AverageMeter:
     """
@@ -67,6 +124,15 @@ class AverageMeter:
         self.cls_er_sum = 0.
         self.cls_loss_count = 0.
         self.cls_er_count = 0.
+
+        self.det_loss_sum = 0.
+        self.det_loss_count = 0.
+
+    def update_det(self, output, loss):
+        bsz = output.size(0)
+
+        self.det_loss_sum += float(loss) * bsz
+        self.det_loss_count += bsz
 
     def update_seg(self, pred_mask, batch, loss=None):
         ignore_mask = batch.get('query_ignore_idx')
@@ -153,6 +219,9 @@ class AverageMeter:
     def avg_cls_loss(self):
         return self.cls_loss_sum / self.cls_loss_count if self.cls_loss_count else 0
 
+    def avg_det_loss(self):
+        return self.det_loss_sum / self.det_loss_count if self.det_loss_count else 0
+        
     def update_cls(self, pred_cls, gt_cls, loss=None):
         pred_cls, gt_cls = pred_cls.cpu(), gt_cls.cpu()
         pred_correct = pred_cls == gt_cls
